@@ -1,0 +1,118 @@
+########################################################################
+# Read in grant, publication, and link data from NIH for FYs 2012-2016
+###########################################################################
+
+tf <- tempfile(tmpdir = tdir <- tempdir())
+start=12
+end=17
+nih = list()
+nihlink=lst()
+nihpub=list()
+for(i in start:end)
+{ 
+  url<- paste0("https://exporter.nih.gov/CSVs/final/RePORTER_PUBLNK_C_20",i,".zip")
+  download.file(url,tf)
+  nihlink[[i]]<-read.csv(unzip(tf, exdir=tdir))
+  url<- paste0("https://exporter.nih.gov/CSVs/final/RePORTER_PRJ_C_FY20",i,".zip")
+  download.file(url,tf)
+  nih[[i]]<-read.csv(unzip(tf, exdir=tdir))
+  url<- paste0("https://exporter.nih.gov/CSVs/final/RePORTER_PUB_C_20",i,".zip")
+  download.file(url,tf)
+  nihpub[[i]]<-read.csv(unzip(tf, exdir=tdir))
+}
+
+url<- "https://exporter.nih.gov/CSVs/final/RePORTER_PATENTS_C_ALL.zip"
+download.file(url,tf)
+nihpat<-read.csv(unzip(tf, exdir=tdir))
+
+#############################################################
+# Combine all years of grant data 2012-2016
+############################################################
+
+nih_fund_time_series <- list()
+var_by_FY = data.frame()
+
+############################################
+# Enter Keep list of variables
+############################################
+
+
+var_names <- c('ACTIVITY', 'SUPPORT_YEAR', 'FUNDING_MECHANISM', 'TOTAL_COST', 'TOTAL_COST_SUB_PROJECT',
+               'STUDY_SECTION', 'ORG_NAME', 'PROJECT_START', 'PROJECT_END')
+
+time_series <- start:end
+
+
+############################################
+# FYs of data 2012-2016
+############################################
+
+var_names_list = list(var_names, time_series)
+
+
+n1 <- length(var_names_list[[1]])
+n2 <- length(var_names_list[[2]])
+
+for(j in 1:n2)
+{    
+   for(k in 1:n1)
+   {
+      var_by_FY[k,j]<- paste0(var_names2[[1]][k],var_names2[[2]][j])
+
+   }
+}
+
+CORE_PROJECT_NUM <- rep('CORE_PROJECT_NUM',dim(var_by_FY)[1])
+var_names3 <- rbind(CORE_PROJECT_NUM, var_by_FY)
+
+n1 <- dim(var_names3)[1]
+n2 <- dim(var_names3)[2]
+
+j<-0
+
+for(i in start:end)
+{ 
+  j<-j+1
+  nih_fund_time_series[[i]] <- nih[[i]][,c('CORE_PROJECT_NUM',var_names)]
+  
+#  names(nih_fund_time_series[[i]]) <- var_names3[,j] 
+  
+#  replace NA in cost columns with 0
+  
+nih_fund_time_series[[i]]$TOTAL_COST[is.na(nih_fund_time_series[[i]]$TOTAL_COST)]<-0
+nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT[is.na(nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT )]<-0
+
+# combine the total cost for each project
+
+nih_fund_time_series[[i]]$cost<-nih_fund_time_series[[i]]$TOTAL_COST + nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT
+
+}
+
+# scrape journal impact factors
+
+library(XML)
+table<-list()
+classes<-c(rep("character",3),rep("numeric",4))
+url<-"http://www.citefactor.org/journal-impact-factor-list-2015.html"
+table[[1]]<-readHTMLTable(url, header=T, which=2,stringsAsFactors=F)
+impacttable<-table[[1]]
+colnames<-c("Index","Journal Name","ISSN","2014/2015","2013","2012", "2011") 
+colnames(impacttable)<-colnames
+for (i in 2:18)
+{
+  url<-paste0("http://www.citefactor.org/journal-impact-factor-list-2015_",i,".html")
+  table[[i]]<-readHTMLTable(url, header=T, colClasses=classes,which=2,stringsAsFactors=F)
+  colnames(table[[i]])<-colnames 
+  impacttable<-rbind(impacttable,table[[i]])
+}
+
+
+
+################################################
+#combine 5 years of cost
+#################################################
+
+nih_aggr<-aggregate(nih_fund_time_series$cost, list(nih_fund_time_series$CORE_PROJECT_NUM),sum)
+
+
+
