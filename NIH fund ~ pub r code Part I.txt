@@ -23,7 +23,7 @@ unzip_online_csv <- function(path_prefix,year,ext)
 start=12
 end=17
 nih = list()
-nihlink=lst()
+nihlink=list()
 nihpub=list()
 for(i in start:end)
 { 
