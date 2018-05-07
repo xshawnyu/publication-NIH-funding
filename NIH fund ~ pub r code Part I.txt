@@ -39,6 +39,127 @@ for(i in start:end)
 
 nihpat<-unzip_online_csv(path_prefix="https://exporter.nih.gov/CSVs/final/RePORTER_PATENTS_C_", year="ALL",ext=".zip") 
 
+
+# scrape journal impact factors
+
+library(XML)
+table<-list()
+classes<-c(rep("character",3),rep("numeric",4))
+url<-"http://www.citefactor.org/journal-impact-factor-list-2015.html"
+table[[1]]<-readHTMLTable(url, header=T, which=2,stringsAsFactors=F)
+impacttable<-table[[1]]
+colnames<-c("Index","Journal Name","ISSN","2014/2015","2013","2012", "2011") 
+colnames(impacttable)<-colnames
+for (i in 2:18)
+{
+  url<-paste0("http://www.citefactor.org/journal-impact-factor-list-2015_",i,".html")
+  table[[i]]<-readHTMLTable(url, header=T, colClasses=classes,which=2,stringsAsFactors=F)
+  colnames(table[[i]])<-colnames 
+  impacttable<-rbind(impacttable,table[[i]])
+}
+
+#############################################################################
+# descriptive and exploratory analysis draft
+# a quick view of cost per publication by type over 5 years
+#############################################################################
+varnames=c("ACTIVITY","CORE_PROJECT_NUM", "FUNDING_MECHANISM","PROJECT_TERMS","TOTAL_COST","TOTAL_COST_SUB_PROJECT")
+fund12to16<-rbind(nih[[12]][,varnames],
+	   	  nih[[13]][,varnames],
+		  nih[[14]][,varnames],
+		  nih[[15]][,varnames],
+		  nih[[16]][,varnames])
+#replace na in cost columns with 0, and sum total cost
+fund12to16$TOTAL_COST[is.na(fund12to16$TOTAL_COST)]<-0
+fund12to16$TOTAL_COST_SUB_PROJECT[is.na(fund12to16$TOTAL_COST_SUB_PROJECT)]<-0
+fund12to16$cost<-fund12to16$TOTAL_COST+fund12to16$TOTAL_COST_SUB_PROJECT
+varnames2=c("ACTIVITY","CORE_PROJECT_NUM","PROJECT_TERMS","FUNDING_MECHANISM","cost")
+fund12to16<-fund12to16[,varnames2]
+
+# combine 5 years of cost
+aggr<-aggregate(fund12to16$cost, list(fund12to16$CORE_PROJECT_NUM),sum)
+colnames(aggr)<- c("CORE_PROJECT_NUM","cost")
+
+#create analysis file with type, project number and total cost
+varnames3=c("ACTIVITY","CORE_PROJECT_NUM","PROJECT_TERMS","FUNDING_MECHANISM")
+fund12to16st<-merge(fund12to16[,varnames3],aggr,by="CORE_PROJECT_NUM",all.y=TRUE)
+#eliminate duplicate rows
+fund12to16st<-fund12to16st[!duplicated(fund12to16st$CORE_PROJECT_NUM),]
+# eliminate 0  and other place holder in cost rows
+fund12to16st<-fund12to16st[!(fund12to16st$cost<1000),]
+
+#combine data from 5 years of publications
+nihlink13to17<- rbind(nihlink[[13]], nihlink[[14]], nihlink[[15]], nihlink[[16]],nihlink[[17]])
+colnames(nihlink13to17)<-c("PMID", "CORE_PROJECT_NUM")
+pubnum<-as.data.frame(table(nihlink13to17$CORE_PROJECT_NUM))
+colnames(pubnum)<-c("CORE_PROJECT_NUM","pubnum")
+
+# merge cost with publication numbers
+fundpub5yr<-merge(fund12to16st, pubnum, by="CORE_PROJECT_NUM")
+
+# grant by type and cost per publication, barplot
+
+r01<-fundpub5yr[fundpub5yr$ACTIVITY=="R01",]
+r21<-fundpub5yr[fundpub5yr$ACTIVITY=="R21",]
+k99<-fundpub5yr[fundpub5yr$ACTIVITY=="K99",]
+
+type<- c("R01","R21","K99")
+
+costperpub<- c(sum(r01$cost)/sum(r01$pubnum),
+
+sum(r21$cost)/sum(r21$pubnum),
+
+sum(k99$cost)/sum(k99$pubnum))
+
+costperpub<-round(costperpub)
+
+table1<-data.frame(type,costperpub)
+
+costbar<- barplot(table1$costperpub,names.arg= c("lg grant","med grant","sm grant"),
+
+main="Cost per Publication 2012-16",ylab="dollars")
+
+text(x = costbar, label=costperpub, pos=3, cex = 0.55, col = "red")
+
+##############################################################
+# examine 3 largest research fields
+##############################################################
+
+library(ggpubr)
+
+cancer<-fundpub5yr[grepl("cancer", fundpub5yr$PROJECT_TERMS),]
+
+heart<-fundpub5yr[grepl(c("heart|vascular"), fundpub5yr$PROJECT_TERMS),]
+
+diab<-fundpub5yr[grepl("diabetes|diabetic", fundpub5yr$PROJECT_TERMS),]
+
+# discount center grants
+
+cancer<-cancer[!cancer$ACTIVITY=="P30",]
+heart<-heart[!heart$ACTIVITY=="P30",]
+diab<-diab[!diab$ACTIVITY=="P30",]
+
+cancer$type<-"cancer"
+heart$type<-"heart"
+diab$type<-"diab"
+
+field<-rbind(cancer,heart,diab)
+
+field$perpub<-field$cost/field$pubnum
+
+fit<-aov(perpub~type, data=field)
+
+summary(fit)
+
+ggline(field, x = "type", y = "perpub", add=c("mean_sd","jitters"),color="type",
+      order = c("cancer", "heart", "diab"),xlab = "Research field", ylab = "Dollars per Publication")
+
+
+####################################################################################################
+# A deeper dive into the finer details of the grant files
+####################################################################################################
+
+
+
 #############################################################
 # Combine all years of grant data 2012-2016
 ############################################################
@@ -101,26 +222,6 @@ nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT[is.na(nih_fund_time_series[[i]]
 nih_fund_time_series[[i]]$cost<-nih_fund_time_series[[i]]$TOTAL_COST + nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT
 
 }
-
-# scrape journal impact factors
-
-library(XML)
-table<-list()
-classes<-c(rep("character",3),rep("numeric",4))
-url<-"http://www.citefactor.org/journal-impact-factor-list-2015.html"
-table[[1]]<-readHTMLTable(url, header=T, which=2,stringsAsFactors=F)
-impacttable<-table[[1]]
-colnames<-c("Index","Journal Name","ISSN","2014/2015","2013","2012", "2011") 
-colnames(impacttable)<-colnames
-for (i in 2:18)
-{
-  url<-paste0("http://www.citefactor.org/journal-impact-factor-list-2015_",i,".html")
-  table[[i]]<-readHTMLTable(url, header=T, colClasses=classes,which=2,stringsAsFactors=F)
-  colnames(table[[i]])<-colnames 
-  impacttable<-rbind(impacttable,table[[i]])
-}
-
-
 
 ################################################
 #combine 5 years of cost
