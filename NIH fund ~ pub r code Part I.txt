@@ -95,29 +95,18 @@ colnames(pubnum)<-c("CORE_PROJECT_NUM","pubnum")
 
 # merge cost with publication numbers
 fundpub5yr<-merge(fund12to16st, pubnum, by="CORE_PROJECT_NUM")
-
 # grant by type and cost per publication, barplot
-
 r01<-fundpub5yr[fundpub5yr$ACTIVITY=="R01",]
 r21<-fundpub5yr[fundpub5yr$ACTIVITY=="R21",]
 k99<-fundpub5yr[fundpub5yr$ACTIVITY=="K99",]
-
 type<- c("R01","R21","K99")
-
 costperpub<- c(sum(r01$cost)/sum(r01$pubnum),
-
 sum(r21$cost)/sum(r21$pubnum),
-
 sum(k99$cost)/sum(k99$pubnum))
-
 costperpub<-round(costperpub)
-
 table1<-data.frame(type,costperpub)
-
 costbar<- barplot(table1$costperpub,names.arg= c("lg grant","med grant","sm grant"),
-
 main="Cost per Publication 2012-16",ylab="dollars")
-
 text(x = costbar, label=costperpub, pos=3, cex = 0.55, col = "red")
 
 ##############################################################
@@ -125,15 +114,10 @@ text(x = costbar, label=costperpub, pos=3, cex = 0.55, col = "red")
 ##############################################################
 
 library(ggpubr)
-
 cancer<-fundpub5yr[grepl("cancer", fundpub5yr$PROJECT_TERMS),]
-
 heart<-fundpub5yr[grepl(c("heart|vascular"), fundpub5yr$PROJECT_TERMS),]
-
 diab<-fundpub5yr[grepl("diabetes|diabetic", fundpub5yr$PROJECT_TERMS),]
-
 # discount center grants
-
 cancer<-cancer[!cancer$ACTIVITY=="P30",]
 heart<-heart[!heart$ACTIVITY=="P30",]
 diab<-diab[!diab$ACTIVITY=="P30",]
@@ -141,18 +125,13 @@ diab<-diab[!diab$ACTIVITY=="P30",]
 cancer$type<-"cancer"
 heart$type<-"heart"
 diab$type<-"diab"
-
 field<-rbind(cancer,heart,diab)
-
 field$perpub<-field$cost/field$pubnum
-
 fit<-aov(perpub~type, data=field)
-
 summary(fit)
-
+TukeyHSD(fit)
 ggline(field, x = "type", y = "perpub", add=c("mean_sd","jitters"),color="type",
       order = c("cancer", "heart", "diab"),xlab = "Research field", ylab = "Dollars per Publication")
-
 
 ####################################################################################################
 # A deeper dive into the finer details of the grant files
