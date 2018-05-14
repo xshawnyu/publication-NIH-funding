@@ -138,10 +138,9 @@ ggline(field, x = "type", y = "perpub", add=c("mean_sd","jitters"),color="type",
 ####################################################################################################
 
 
-
 #############################################################
 # Combine all years of grant data 2012-2016
-############################################################
+#############################################################
 
 nih_fund_time_series <- list()
 var_by_FY = data.frame()
@@ -151,7 +150,7 @@ var_by_FY = data.frame()
 ############################################
 
 
-var_names <- c('ACTIVITY', 'SUPPORT_YEAR', 'FUNDING_MECHANISM', 'TOTAL_COST', 'TOTAL_COST_SUB_PROJECT',
+var_names <- c('ACTIVITY', 'APPLICATION_TYPE','SUPPORT_YEAR', 'FUNDING_MECHANISM', 'TOTAL_COST', 'TOTAL_COST_SUB_PROJECT',
                'STUDY_SECTION', 'ORG_NAME', 'PROJECT_START', 'PROJECT_END')
 
 time_series <- start:end
@@ -171,42 +170,114 @@ for(j in 1:n2)
 {    
    for(k in 1:n1)
    {
-      var_by_FY[k,j]<- paste0(var_names2[[1]][k],var_names2[[2]][j])
+      var_by_FY[k,j]<- paste0(var_names_list[[1]][k],var_names_list[[2]][j])
 
    }
 }
 
 CORE_PROJECT_NUM <- rep('CORE_PROJECT_NUM',dim(var_by_FY)[1])
-var_names3 <- rbind(CORE_PROJECT_NUM, var_by_FY)
+APPLICATION_ID   <- rep('APPLICATION_ID',dim(var_by_FY)[1])
+SUBPROJECT_ID    <- rep('SUBPROJECT_ID',dim(var_by_FY)[1])
 
-n1 <- dim(var_names3)[1]
-n2 <- dim(var_names3)[2]
+var_names2 <- rbind(APPLICATION_ID,CORE_PROJECT_NUM,SUBPROJECT_ID, var_by_FY)
 
-j<-0
+n1 <- dim(var_names2)[1]
+n2 <- dim(var_names2)[2]
+
+index <- start-1
 
 for(i in start:end)
 { 
-  j<-j+1
-  nih_fund_time_series[[i]] <- nih[[i]][,c('CORE_PROJECT_NUM',var_names)]
-  
-#  names(nih_fund_time_series[[i]]) <- var_names3[,j] 
-  
-#  replace NA in cost columns with 0
-  
-nih_fund_time_series[[i]]$TOTAL_COST[is.na(nih_fund_time_series[[i]]$TOTAL_COST)]<-0
-nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT[is.na(nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT )]<-0
 
-# combine the total cost for each project
+   nih_fund_time_series[[i]] <- nih[[i]][,c('APPLICATION_ID','CORE_PROJECT_NUM','SUBPROJECT_ID',var_names)]
+         
+   # replace NA in cost columns with 0
 
-nih_fund_time_series[[i]]$cost<-nih_fund_time_series[[i]]$TOTAL_COST + nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT
+   nih_fund_time_series[[i]]$TOTAL_COST[is.na(nih_fund_time_series[[i]]$TOTAL_COST)]<-0
+   nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT[is.na(nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT )]<-0
+
+   # combine the total cost for each project
+
+   nih_fund_time_series[[i]]$cost<-nih_fund_time_series[[i]]$TOTAL_COST + nih_fund_time_series[[i]]$TOTAL_COST_SUB_PROJECT
+
+   names(nih_fund_time_series[[i]]) <- c(var_names2[,(i-index)], paste0('cost',i)) 
+    
+}
+
+
+
+################################################################
+# 
+#  Remove records with missing Core project numbers
+#
+################################################################
+
+nih12 <- nih_fund_time_series[[12]][ nchar(nih_fund_time_series[[12]]$CORE_PROJECT_NUM) >= 11 , ]
+nih13 <- nih_fund_time_series[[13]][ nchar(nih_fund_time_series[[13]]$CORE_PROJECT_NUM) >= 11 , ]
+nih14 <- nih_fund_time_series[[14]][ nchar(nih_fund_time_series[[14]]$CORE_PROJECT_NUM) >= 11 , ]
+nih15 <- nih_fund_time_series[[15]][ nchar(nih_fund_time_series[[15]]$CORE_PROJECT_NUM) >= 11 , ]
+nih16 <- nih_fund_time_series[[16]][ nchar(nih_fund_time_series[[16]]$CORE_PROJECT_NUM) >= 11 , ]
+nih17 <- nih_fund_time_series[[17]][ nchar(nih_fund_time_series[[17]]$CORE_PROJECT_NUM) >= 11 , ]
+
+
+subset_df <- function(df, var, levels)
+{
+
+  y <- grep(var, pattern=levels)
+  x <- df[y,]
+  return(x)
 
 }
 
-################################################
-#combine 5 years of cost
-#################################################
 
-nih_aggr<-aggregate(nih_fund_time_series$cost, list(nih_fund_time_series$CORE_PROJECT_NUM),sum)
+pattern <- "Non-SBIR/STTR RPGs|OTHER RESEARCH-RELATED|RESEARCH CENTERS"
+
+nih12_ext <-subset_df(df=nih12, var=nih12$FUNDING_MECHANISM12, levels=pattern) 
+nih13_ext <-subset_df(df=nih13, var=nih13$FUNDING_MECHANISM13, levels=pattern) 
+nih14_ext <-subset_df(df=nih14, var=nih14$FUNDING_MECHANISM14, levels=pattern) 
+nih15_ext <-subset_df(df=nih15, var=nih15$FUNDING_MECHANISM15, levels=pattern) 
+nih16_ext <-subset_df(df=nih16, var=nih16$FUNDING_MECHANISM16, levels=pattern) 
+nih17_ext <-subset_df(df=nih17, var=nih17$FUNDING_MECHANISM17, levels=pattern) 
+
+nih_ext <- list(nih12_ext, nih13_ext, nih14_ext, nih15_ext,nih16_ext,nih17_ext)
+
+#1 = New application
+#2 = Competing continuation (also, competing renewal)
+#3 = Application for additional (supplemental) support.  There are two kinds of type
+#    3 competing revisions (which are peer-reviewed and administrative supplements)
+#4 = Competing extension for an R37 award or first non-competing year of a Fast Track SBIR/STTR award
+#5 = Non-competing continuation
+#7 = Change of grantee institution
+#9 = Change of NIH awarding Institute or Division (on a competing continuation)
+
+app_type_names <- c('New','Competing renewal','Supplemental','Competing renewal (SBIR)',
+                    'Non-competing renewal',  'Unknown','Change in grantee inst.','Other','Change of NIH awarding instutute')
 
 
+plot_app_type <- function(FY)
+{
+   
+   app_var <- paste0('APPLICATION_TYPE',FY)
+
+   app_type <- table(nih_ext[[FY-index]][app_var])
+
+   barplot(app_type, names = app_type_names, xlab = "Application Type", ylab = "Number of Grants",  
+           main = paste0('FY', ' 20', FY, ' Number of Extramural Grants by Application Type'))
+
+   return(app_type)
+
+}
+
+
+summary(nih12_ext[nih12_ext$TOTAL_COST12 >0 ,]$TOTAL_COST12)
+summary(nih13_ext[nih13_ext$TOTAL_COST13 >0 ,]$TOTAL_COST13)
+summary(nih14_ext[nih14_ext$TOTAL_COST14 >0 ,]$TOTAL_COST14)
+summary(nih15_ext[nih15_ext$TOTAL_COST15 >0 ,]$TOTAL_COST15)
+summary(nih16_ext[nih16_ext$TOTAL_COST16 >0 ,]$TOTAL_COST16)
+summary(nih17_ext[nih17_ext$TOTAL_COST17 >0 ,]$TOTAL_COST17)
+
+cat<- cut(nih12_ext$TOTAL_COST12, c(1,5000, 25000, 100000, 200000, 300000, 400000, 500000, 750000, Inf)) 
+names_cat <- c('under 5K', '5K-25K','25K-100K', '100K-200K', '200K-300K', '400K-500K', '5005K-750K', '>750K')
+names(cat) <- names_cat
+plot(cat, main="Number of Grants by Award Amount"))
 
